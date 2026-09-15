@@ -1,5 +1,10 @@
-# Nicholas M. Rathmann, NBI, UCPH, 2020-2021
-# Sponsered by Villum Fonden as part of the project "IceFlow".
+"""
+Nicholas M. Rathmann, Niels Bohr Institute, 2020-
+
+Developed as part of
+- the Villum Foundation investigator project IceFlow
+- the Novo Nordisk Foundation challenge project PRECISE
+"""
 
 import sys, os, copy, glob
 import pandas as pd
@@ -25,6 +30,8 @@ from skimage import measure, color #, io
 
 #from scipy import ndimage as nd
 from scipy.ndimage import generate_binary_structure
+
+import pypaya2
 
 #from matplotlib import cm
 #from matplotlib.backends.qt_compat import QtWidgets
@@ -286,8 +293,8 @@ class MyTilesWidget(QWidget):
         self.tileview = tileview
         self.tileview_bubbles = tileview_bubbles
         self.imgxmax, self.imgymax = 1000, 800# Resolution for the gridded tiles view. If too large, low res monitors can't show the full image.
-        self.xscale = self.imgxmax/Nx
-        self.yscale = self.imgymax/Ny
+        self.xscale = int(self.imgxmax/Nx)
+        self.yscale = int(self.imgymax/Ny)
         self.childInFocus = None
         self.skiplist = []
         
