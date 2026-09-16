@@ -23,7 +23,10 @@ import cv2
 from scipy import ndimage
 
 import skimage
-if float(skimage.__version__[0:4]) < 0.16: exit('Please install "skimage" version 0.16 or higher.')
+#if float(skimage.__version__[0:4]) < 0.16: exit('Please install "skimage" version 0.16 or higher.')
+from packaging.version import Version
+if Version(skimage.__version__) < Version("0.16"): exit(...)
+
 from skimage import morphology
 from skimage.segmentation import clear_border
 from skimage import measure, color #, io
@@ -256,7 +259,7 @@ class OverView(QWidget):
             fname = self.fcombcsv_grains if TYPE==T_TILEVIEW_GRAINS else self.fcombcsv_bubbles
             df = pd.read_csv(fname, sep=',')
             
-            f, ((ax1, ax2, ax3), (ax4, ax5, ax6)) = plt.subplots(2, 3, figsize=(12,7))
+            f, ((ax1, ax2, ax3), (ax4, ax5, ax6), (axq2, axq3, axq4), ) = plt.subplots(3, 3, figsize=(12,9))
             f.suptitle(fname + ' (%i %s)'%(len(df['grain_number']), 'grains' if TYPE==T_TILEVIEW_GRAINS else 'bubbles') )
             bins = 40
             
@@ -392,21 +395,39 @@ class TileView(QWidget):
         self.fig_cntr = PlotCanvas()
         self.fig_segm = PlotCanvas()
         self.fig_lbld = PlotCanvas()
+
+        self.fig_perim0 = PlotCanvas(plottype='hist', histcolor='#33a02c', title='Perimeter 0 [px]')        
+        self.fig_area0  = PlotCanvas(plottype='hist', histcolor='0.4', title='Area 0 [px^2]')
+        self.fig_ori0   = PlotCanvas(plottype='hist', histcolor='#b15928', title='Orientation 0 [deg. btw. y- and major-axis]')
+
+        self.fig_perim0.plotstats([]); grid.addWidget(self.fig_perim0, 6, 0)
+        self.fig_area0.plotstats([]); grid.addWidget(self.fig_area0, 6, 1)
+        self.fig_ori0.plotstats([]); grid.addWidget(self.fig_ori0, 6, 2)
+
+        self.fig_ecc   = PlotCanvas(plottype='hist', histcolor='#6a3d9a', title='Eccentricity')
+        self.fig_majorax = PlotCanvas(plottype='hist', histcolor='#1f78b4', title='Major axis [px]')
         
-        self.fig_area = PlotCanvas(plottype='hist', histcolor='0.4', title='Area [px^2]')
-        self.fig_edia = PlotCanvas(plottype='hist', histcolor='0.0', title='Equivalent diameter [px]')
-        self.fig_ecce = PlotCanvas(plottype='hist', histcolor='#6a3d9a', title='Eccentricity')
-        self.fig_orie = PlotCanvas(plottype='hist', histcolor='#b15928', title='Orientation [deg. btw. y- and major-axis]')
-        self.fig_peri = PlotCanvas(plottype='hist', histcolor='#33a02c', title='Perimeter [px]')
-        self.fig_maax = PlotCanvas(plottype='hist', histcolor='#1f78b4', title='Major axis [px]')
-        
-        self.fig_edia.plotstats([]); grid.addWidget(self.fig_edia, 6, 0)        
-        self.fig_area.plotstats([]); grid.addWidget(self.fig_area, 6, 1)
-        self.fig_peri.plotstats([]); grid.addWidget(self.fig_peri, 6, 2)
-        self.fig_maax.plotstats([]); grid.addWidget(self.fig_maax, 7, 0)
-        self.fig_ecce.plotstats([]); grid.addWidget(self.fig_ecce, 7, 1)
-        self.fig_orie.plotstats([]); grid.addWidget(self.fig_orie, 7, 2)
+#        self.fig_majorax.plotstats([]); grid.addWidget(self.fig_majorax, 7, 0)
+#        self.fig_ecc.plotstats([]); grid.addWidget(self.fig_ecc, 7, 1)
             
+        ###
+        
+        self.fig_perim = PlotCanvas(plottype='hist', histcolor='#33a02c', title='Perimeter [px]')        
+        self.fig_area  = PlotCanvas(plottype='hist', histcolor='0.4', title='Area [px^2]')
+        self.fig_ori   = PlotCanvas(plottype='hist', histcolor='#b15928', title='Orientation [deg. btw. y- and major-axis]')
+
+        self.fig_perim.plotstats([]); grid.addWidget(self.fig_perim, 7, 0)
+        self.fig_area.plotstats([]); grid.addWidget(self.fig_area, 7, 1)
+        self.fig_ori.plotstats([]); grid.addWidget(self.fig_ori, 7, 2)
+
+        self.fig_q2 = PlotCanvas(plottype='hist', histcolor='k', title='q2')
+        self.fig_q3 = PlotCanvas(plottype='hist', histcolor='c', title='q3')
+        self.fig_q4 = PlotCanvas(plottype='hist', histcolor='m', title='q4')
+
+        self.fig_q2.plotstats([]); grid.addWidget(self.fig_q2, 8, 0)
+        self.fig_q3.plotstats([]); grid.addWidget(self.fig_q3, 8, 1)
+        self.fig_q4.plotstats([]); grid.addWidget(self.fig_q4, 8, 2)
+        
         #------------------
         
         myBold=QFont()
@@ -497,6 +518,8 @@ class TileView(QWidget):
         grid.setRowStretch(1, 2)
         grid.setRowStretch(6, 1)
         grid.setRowStretch(7, 1)
+        grid.setRowStretch(8, 1)
+        grid.setRowStretch(9, 1)
         
         self.setLayout(grid)
         self.setWindowTitle('Tile viewer -- %s'%(self.typestr))
@@ -542,8 +565,8 @@ class TileView(QWidget):
 
     def find_grains(self):
         
-        mask = (self.tile_segm==255)  #Sets TRUE for all 255 valued pixels and FALSE for 0
-        mask = clear_border(mask)   #Removes edge touching grains. 
+        mask = (self.tile_segm==255) # Sets TRUE for all 255 valued pixels and FALSE for 0
+        mask = clear_border(mask) # Removes edge touching grains. 
         mask = morphology.remove_small_objects(mask, 500)
                 
         s = generate_binary_structure(2,2)
@@ -556,31 +579,89 @@ class TileView(QWidget):
 
         #self.clusters = measure.regionprops(labeled_mask, self.tile, coordinates='xy')
         self.clusters = measure.regionprops(labeled_mask, self.tile) # assumes rc-coords in skimage>=0.16
+        
         getGrainsProp = lambda prop: np.array([ cluster_props[prop] for cluster_props in self.clusters])
         
-        self.gnum = getGrainsProp('label')
-        self.edia = getGrainsProp('equivalent_diameter')
-        self.area = getGrainsProp('area')
-        self.ecce = getGrainsProp('eccentricity')
-        self.orie = getGrainsProp('orientation') * self.rad2deg # rad to deg
-        self.peri = getGrainsProp('perimeter')
-        self.cent = getGrainsProp('centroid')
-        self.maax = getGrainsProp('major_axis_length')
-        self.miax = getGrainsProp('minor_axis_length')
+        self.gnum     = getGrainsProp('label')
+        self.centroid = getGrainsProp('centroid')
         
+        self.perim0 = getGrainsProp('perimeter')
+        self.area0  = getGrainsProp('area')
+        self.ori0   = getGrainsProp('orientation') * self.rad2deg # rad to deg
+
+        self.majorax = getGrainsProp('major_axis_length')
+        self.minorax = getGrainsProp('minor_axis_length')        
+        self.ecc     = getGrainsProp('eccentricity')
+        self.equivdiam   = getGrainsProp('equivalent_diameter')
+
+        self.fig_perim0.plotstats(self.perim0) 
+        self.fig_area0.plotstats(self.area0)
+        self.fig_ori0.plotstats(self.ori0)
+
+#        self.fig_ecc.plotstats(self.ecc)
+#        self.fig_majorax.plotstats(self.majorax)
+        
+        self.fig_segm.plotellipses(self.centroid, self.ori0/self.rad2deg, self.majorax, self.minorax)
+        
+        ###
+
+        area, perim, ori = [], [], []
+        pi = {s: [] for s in range(2, 9)}
+        qi = {s: [] for s in range(2, 9)}
+        
+        for cl in self.clusters:
+        
+            bw = np.pad(cl.image, 1).astype(float) # 1-px background border
+            m = pypaya2.imt_for_image(bw, threshold=0.5)
+            
+            for s in range(2, 9):
+            
+                pi[s].append(m['psi%i' % s][0])
+                qi[s].append(m['q%i' % s][0])
+                
+                psi2 = m['psi2'][0]
+                theta = (np.angle(psi2)/2 + np.pi) % np.pi - np.pi/2 # Elongation axis, same convention as skimage 'orientation'
+                ori.append(np.degrees(theta))
+                
+                area.append(m['area'][0])
+                perim.append(m['perimeter'][0])
+                
+        self.pi = {s: np.array(v) for s, v in pi.items()}
+        self.qi = {s: np.array(v) for s, v in qi.items()}
+        self.perim = np.array(perim)
+        self.area = np.array(area)
+        self.ori = np.array(ori)
+
+        self.fig_perim.plotstats(self.perim)
         self.fig_area.plotstats(self.area)
-        self.fig_edia.plotstats(self.edia)
-        self.fig_ecce.plotstats(self.ecce)
-        self.fig_maax.plotstats(self.maax)
-        self.fig_peri.plotstats(self.peri)
-        self.fig_orie.plotstats(self.orie)
-        
-        self.fig_segm.plotellipses(self.cent,self.orie/self.rad2deg,self.maax,self.miax)
+        self.fig_ori.plotstats(self.ori)
+
+        self.fig_q2.plotstats(self.qi[2])
+        self.fig_q3.plotstats(self.qi[3])
+        self.fig_q4.plotstats(self.qi[4])
+                
+      #  self.fig_segm.plotellipses(self.centroid, self.ori/self.rad2deg, self.majorax, self.minorax, cma='#6a3d9a', cmi='#cab2d6')
+      
+        self.fig_lbld.plotimtsymbols(self.centroid, self.pi, self.qi, sizes=self.equivdiam/2, scale=3, svals=(2,3,4))
+        self.fig_segm.plotimtsymbols(self.centroid, self.pi, self.qi, sizes=self.equivdiam/2, scale=3, svals=(2,3,4))
+        self.fig_cntr.plotimtsymbols(self.centroid, self.pi, self.qi, sizes=self.equivdiam/2, scale=3, svals=(2,3,4))
+      
+      ### These are the fields to gennerally be saved when requested by user:
+
+        data = dict(
+            # from measure.regionprops()
+            centroid=self.centroid, majorax=self.majorax, minorax=self.minorax, ecc=self.ecc, equivdiam=self.equivdiam, 
+            perim0=self.perim0, area0=self.area0, ori0=self.ori0, 
+            # from papaya2
+            perim=self.perim, area=self.area, ori=self.ori, 
+            qi=self.qi, pi=self.pi, 
+        )
         
     def save_csv(self, tilex0=0, tiley0=0):
         
         fname = self.parent.dumppath + '/%i_%i_%s.csv'%(self.tile_ij[0], self.tile_ij[1], self.typestr)
         
+        # old list, to be revised in restructured code. Maybe use saved data() dict in slot self.data ?
         propList = {'gnum':'grain_number', \
                     'cntx':'centroid_x', \
                     'cnty':'centroid_y', \
@@ -590,7 +671,9 @@ class TileView(QWidget):
                     'orie':'orientation', \
                     'peri':'perimeter', \
                     'maax':'major_axis_length', \
-                    'miax':'minor_axis_length'}
+                    'miax':'minor_axis_length', \
+                    'q2':'q2', 'q4':'q4', 'q6':'q6', 'psi2re':'psi2_real', 'psi2im':'psi2_imag', 'imt_orientation':'imt_orientation', \
+                    }
     
         output_file = open(fname, 'w')
         output_file.write(","+",".join(propList.values()) + '\n') 
@@ -677,8 +760,12 @@ class PlotCanvas(FigureCanvas):
         self.ax.set_xlabel(self.title)
         self.draw()        
 
-    def plotellipses(self, centriods, orientations, majoraxes, minoraxes):
-        plot_ellipses(self.ax, centriods, orientations, majoraxes, minoraxes)
+    def plotellipses(self, *args, **kw):
+        plot_ellipses(self.ax, *args, **kw)
+        self.draw()
+        
+    def plotimtsymbols(self, *args, **kwargs):
+        plot_imt_symbols(self.ax, *args, **kwargs)
         self.draw()
 
 ###############################################################################
@@ -697,7 +784,39 @@ def plot_ellipses(ax, centriods, orientations, majoraxes, minoraxes, cma='#e31a1
         ax.plot((x0, x1), (y0, y1), '-', color=cmi, linewidth=2.0)
         ax.plot((x0, x2), (y0, y2), '-', color=cma, linewidth=2.0)
         ax.plot(x0, y0, '.', color=cmid, markersize=8)
-    
+
+def plot_imt_symbols(ax, centroids, psis, qs, sizes=None, svals=(2, 3, 4, 6),
+                     scale=1.0, arms='corners', colors=None, lw=1.5):
+    """
+    Draw s-fold symbols on each grain centroid, showing the distinguished
+    directions of the irreducible Minkowski tensors psi_s.
+
+    centroids : list of (row, col), as from regionprops
+    psis, qs  : dicts {s: array over grains} of complex psi_s and real q_s
+    sizes     : per-grain length scale (e.g. equivalent radius); None = 1 px
+    svals     : which symmetry orders to draw
+    scale     : overall arm length multiplier
+    arms      : 'corners' -> arms point to protrusions/elongation (s=2 gives
+                the long axis); 'normals' -> arms along dominant boundary normals
+    colors    : dict {s: color}, or a single color for all
+    """
+    if colors is None:
+        colors = {2: '#e31a1c', 3: '#ff7f00', 4: '#1f78b4',
+                  5: '#b15928', 6: '#33a02c', 8: '#6a3d9a'}
+    for s in svals:
+        col = colors.get(s, 'k') if isinstance(colors, dict) else colors
+        psi = np.asarray(psis[s])
+        q = np.asarray(qs[s])
+        xs, ys = [], []
+        for ii, (y0, x0) in enumerate(centroids):
+            L = scale * q[ii] * (1.0 if sizes is None else sizes[ii])
+            phi0 = np.angle(psi[ii]) / s + (np.pi / s if arms == 'corners' else 0.0)
+            for p in phi0 + 2 * np.pi * np.arange(s) / s:
+                # pypaya2 image frame: angle measured from row axis towards column axis
+                xs += [x0, x0 + L * np.sin(p), np.nan]
+                ys += [y0, y0 + L * np.cos(p), np.nan]
+        ax.plot(xs, ys, '-', color=col, lw=lw)
+
 ###############################################################################
 ###############################################################################
        
